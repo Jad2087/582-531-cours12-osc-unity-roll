@@ -1,71 +1,55 @@
-#include <Arduino.h> 
-
-#include <MicroOscSlip.h>  
-
-#include <FastLED.h> 
-CRGB monPixelAtom;  
-
-#include <M5_PbHub.h> 
-M5_PbHub myPbHub;
-
-MicroOscSlip<128> monOsc(&Serial);
-// Le <128> spécifie la taille du tampon pour l'OSC (c'est la quantité de données qu'il peut gérer).
-
-#include <M5_Encoder.h>
-M5_Encoder myEncoder;
-  
-#define CANAL_KEY_UNIT 1       
-
-void setup()
-{
+#include <Arduino.h>
+#include <M5_PbHub.h>  
+#include <MicroOscSlip.h>
+#include <FastLED.h>
  
-  Serial.begin(115200);
+MicroOscSlip<128> monOsc(&Serial);
+ 
+#define CANAL_KEY_UNIT 1  
+#define KEY_CHANNEL_ANGLE 0
+ 
+unsigned long monChronoDepart ; // À DÉPLACER au début du code avec les autres variables globales
+CRGB keyPixel;
+ 
+M5_PbHub myPbHub;
+ 
+void myOscMessageParser(MicroOscMessage & receivedOscMessage) {
+  // Ici, un if et receivedOscMessage.checkOscAddress() est utilisé pour traiter les différents messages
+  if (receivedOscMessage.checkOscAddress("/color")) {  // MODIFIER /pixel pour l'adresse qui sera reçue
+       int premierArgument = receivedOscMessage.nextAsInt(); // Récupérer le premier argument du message en tant que int
+       int deuxiemerArgument = receivedOscMessage.nextAsInt(); // SI NÉCESSAIRE, récupérer un autre int
+       int troisiemerArgument = receivedOscMessage.nextAsInt(); // SI NÉCESSAIRE, récupérer un autre int
+ 
+       // UTILISER ici les arguments récupérés
+       myPbHub.setPixelColor( CANAL_KEY_UNIT , 0 , premierArgument,deuxiemerArgument,troisiemerArgument );
+       FastLED.show();
+       
+ 
+   // SI NÉCESSAIRE, ajouter d'autres if pour recevoir des messages avec d'autres adresses
+   } else if (receivedOscMessage.checkOscAddress("/")) {  // MODIFIER /autre une autre adresse qui sera reçue
+       // ...
+   }
+}
+ 
+void setup() {
   Wire.begin();
-  myPbHub.begin(); 
-  myEncoder.begin();
+  myPbHub.begin();
+  Serial.begin(115200);
  
   myPbHub.setPixelCount(CANAL_KEY_UNIT, 1);
-
-  FastLED.addLeds<WS2812, 27, GRB>(&monPixelAtom, 1); 
 }
-
-unsigned long monChronoDepart ;
-
-void loop()
-{
-  // Mise à jour des valeurs de l'encodeur. 
-  // Doit être appelé régulièrement.
-  // Doit être appelé avant de lire les valeurs.
-  myEncoder.update();
-  
-  // Lecture de la rotation de l'encodeur
-  int valeurEncodeur = myEncoder.getEncoderRotation();
-
-  // Lecture du changement depuis la dernière lecture
-  int changementEncodeur = myEncoder.getEncoderChange();
-
-  // Lecture du bouton 
-  int etatBouton = myEncoder.getButtonState();
-   
-  monOsc.sendInt("/changement", changementEncodeur);
-  monOsc.sendInt("/saut", etatBouton);  
-
-  // Changer la couleur des deux pixels
-  // CHANGER ROUGE, VERT, BLEU pour des valeurs entre 0 et 255 (inclusivement)
-
-  if (millis() - monChronoDepart >= 20) {
+ 
+void loop() {
+  monOsc.onOscMessageReceived(myOscMessageParser);
+ 
+  if ( millis() - monChronoDepart >= 20 ) {
     monChronoDepart = millis();
-
-    if (changementEncodeur > 0) {
-      // LED droite
-      myEncoder.setLEDColorRight(0, 255, 0); 
-      myEncoder.setLEDColorLeft(0, 0, 0);
-    }
-   if (changementEncodeur < 0) {
-      // LED gauche
-      myEncoder.setLEDColorLeft(255, 0, 0); 
-      myEncoder.setLEDColorRight(0, 0, 0);
-    }  
+   
+    int maLectureAnalogique = myPbHub.analogRead(KEY_CHANNEL_ANGLE);
+    monOsc.sendInt("/angle", maLectureAnalogique);
+ 
+    int maLectureKey = myPbHub.digitalRead(CANAL_KEY_UNIT);
+    monOsc.sendInt("/but", maLectureKey);
+   
   }
 }
-
